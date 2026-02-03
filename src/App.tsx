@@ -3,10 +3,11 @@ import { QRCodeSVG } from 'qrcode.react';
 import "./App.css";
 import { mailService, Email, User } from "./services/api";
 
+const DEFAULT_TEST_TOKEN = "87e2bd40-7208-4a43-8043-c0fda2fed1fb";
+
 function App() {
-  const [authToken, setAuthToken] = useState(() => localStorage.getItem("authToken") ?? import.meta.env.VITE_AUTH_TOKEN ?? "");
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem("authToken") ?? DEFAULT_TEST_TOKEN);
   const [activeTab, setActiveTab] = useState<'fetch' | 'add'>('fetch');
-  const requiredToken = import.meta.env.VITE_AUTH_TOKEN_REQUIRED ?? import.meta.env.VITE_AUTH_TOKEN ?? "";
   
   // Fetch Email State
   const [toEmail, setToEmail] = useState("");
@@ -70,10 +71,6 @@ function App() {
     }
     if (!authToken) {
         setFetchStatus("请先填写 Token。");
-        return;
-    }
-    if (requiredToken && authToken !== requiredToken) {
-        setFetchStatus(`Token 必须填写 ${requiredToken}`);
         return;
     }
     setFetchStatus("获取中...");
@@ -149,10 +146,6 @@ function App() {
     }
     if (!authToken) {
         setAddUserStatus("请先填写 Token。");
-        return;
-    }
-    if (requiredToken && authToken !== requiredToken) {
-        setAddUserStatus(`Token 必须填写 ${requiredToken}`);
         return;
     }
     setAddUserStatus("正在添加用户...");
