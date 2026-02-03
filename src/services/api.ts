@@ -25,18 +25,21 @@ const isTauri = () => {
 };
 
 const API_BASE_URL = "/api-proxy";
-const AUTH_TOKEN = "8d66ef93-beef-42da-baa3-2d655dd9b51d";
 
 export const mailService = {
-  fetchEmails: async (toEmail: string, token: string = AUTH_TOKEN): Promise<Email[]> => {
+  fetchEmails: async (toEmail: string, token?: string): Promise<Email[]> => {
     if (isTauri()) {
       return await invoke<Email[]>("fetch_emails", { toEmail });
     } else {
+      const resolvedToken = token ?? "";
+      if (!resolvedToken) {
+        throw new Error("Missing authorization token");
+      }
       const response = await fetch(`${API_BASE_URL}/emailList`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": token,
+          "Authorization": resolvedToken,
         },
         body: JSON.stringify({ toEmail }),
       });
@@ -49,20 +52,22 @@ export const mailService = {
     }
   },
 
-  addUsers: async (users: User[], token: string = AUTH_TOKEN): Promise<void> => {
+  addUsers: async (users: User[], token?: string): Promise<void> => {
     if (isTauri()) {
       await invoke("add_users", {
         users: users,
       });
     } else {
       const requestBody = { list: users };
-      console.log("Adding users with body:", JSON.stringify(requestBody, null, 2));
-      
+      const resolvedToken = token ?? "";
+      if (!resolvedToken) {
+        throw new Error("Missing authorization token");
+      }
       const response = await fetch(`${API_BASE_URL}/addUser`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": token,
+          "Authorization": resolvedToken,
         },
         body: JSON.stringify(requestBody),
       });

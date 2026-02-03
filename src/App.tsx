@@ -4,7 +4,7 @@ import "./App.css";
 import { mailService, Email, User } from "./services/api";
 
 function App() {
-  const [authToken, setAuthToken] = useState("8d66ef93-beef-42da-baa3-2d655dd9b51d");
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem("authToken") ?? "");
   const [activeTab, setActiveTab] = useState<'fetch' | 'add'>('fetch');
   
   // Fetch Email State
@@ -18,6 +18,10 @@ function App() {
   const [parsedUsers, setParsedUsers] = useState<User[]>([]);
   const [addUserStatus, setAddUserStatus] = useState("");
   const [isAddingUsers, setIsAddingUsers] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("authToken", authToken);
+  }, [authToken]);
 
   useEffect(() => {
     // Check for email in URL path
