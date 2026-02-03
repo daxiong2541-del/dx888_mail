@@ -4,8 +4,9 @@ import "./App.css";
 import { mailService, Email, User } from "./services/api";
 
 function App() {
-  const [authToken, setAuthToken] = useState(() => localStorage.getItem("authToken") ?? "");
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem("authToken") ?? import.meta.env.VITE_AUTH_TOKEN ?? "");
   const [activeTab, setActiveTab] = useState<'fetch' | 'add'>('fetch');
+  const requiredToken = import.meta.env.VITE_AUTH_TOKEN_REQUIRED ?? import.meta.env.VITE_AUTH_TOKEN ?? "";
   
   // Fetch Email State
   const [toEmail, setToEmail] = useState("");
@@ -65,6 +66,14 @@ function App() {
     
     if (!targetEmail) {
         setFetchStatus("请输入邮箱地址。");
+        return;
+    }
+    if (!authToken) {
+        setFetchStatus("请先填写 Token。");
+        return;
+    }
+    if (requiredToken && authToken !== requiredToken) {
+        setFetchStatus(`Token 必须填写 ${requiredToken}`);
         return;
     }
     setFetchStatus("获取中...");
@@ -136,6 +145,14 @@ function App() {
   async function addUsers() {
     if (parsedUsers.length === 0) {
         setAddUserStatus("请先生成账号。");
+        return;
+    }
+    if (!authToken) {
+        setAddUserStatus("请先填写 Token。");
+        return;
+    }
+    if (requiredToken && authToken !== requiredToken) {
+        setAddUserStatus(`Token 必须填写 ${requiredToken}`);
         return;
     }
     setAddUserStatus("正在添加用户...");
