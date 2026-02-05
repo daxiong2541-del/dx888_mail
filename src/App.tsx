@@ -1,18 +1,30 @@
 import { useState, useEffect } from "react";
 import { QRCodeSVG } from 'qrcode.react';
 import "./App.css";
-import { mailService, Email } from "./services/api";
+import { mailService, Email, User } from "./services/api";
 
 const DEFAULT_TEST_TOKEN = "87e2bd40-7208-4a43-8043-c0fda2fed1fb";
+const BULK_ADD_PASSWORD = "dx888";
+const BULK_ADD_UNLOCK_KEY = "bulkAddUnlocked";
 
 function App() {
   const [authToken, setAuthToken] = useState(() => localStorage.getItem("authToken") ?? DEFAULT_TEST_TOKEN);
+  const [activeTab, setActiveTab] = useState<'fetch' | 'add'>('fetch');
+  const [bulkAddUnlocked, setBulkAddUnlocked] = useState(() => sessionStorage.getItem(BULK_ADD_UNLOCK_KEY) === "1");
+  const [bulkAddPasswordInput, setBulkAddPasswordInput] = useState("");
+  const [bulkAddPasswordStatus, setBulkAddPasswordStatus] = useState("");
   
   // Fetch Email State
   const [toEmail, setToEmail] = useState("");
   const [emails, setEmails] = useState<Email[]>([]);
   const [fetchStatus, setFetchStatus] = useState("");
   const [isLoadingFetch, setIsLoadingFetch] = useState(false);
+
+  // Add User State
+  const [accountCount, setAccountCount] = useState<number>(10);
+  const [parsedUsers, setParsedUsers] = useState<User[]>([]);
+  const [addUserStatus, setAddUserStatus] = useState("");
+  const [isAddingUsers, setIsAddingUsers] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("authToken", authToken);
@@ -80,6 +92,92 @@ function App() {
     }
   }
 
+  function generateRandomString(length: number) {
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let ret = "";
+    for (let i = 0; i < length; ++i) {
+      ret += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return ret;
+  }
+
+  function generatePassword(length = 10) {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let ret = "";
+    for (let i = 0; i < length; ++i) {
+      ret += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return ret;
+  }
+
+  function handleGenerateAccounts() {
+    if (!accountCount || accountCount <= 0) {
+      setAddUserStatus("请输入有效的生成数量。");
+      return;
+    }
+
+    const users: User[] = [];
+    for (let i = 0; i < accountCount; i++) {
+      const username = generateRandomString(8);
+      users.push({
+        email: `${username}@dynmsl.com`,
+        password: generatePassword()
+      });
+    }
+
+    setParsedUsers(users);
+    setAddUserStatus(`已生成 ${users.length} 个随机账号，准备添加。`);
+  }
+
+  function handleExportTxt() {
+    if (parsedUsers.length === 0) {
+      setAddUserStatus("没有可导出的用户。");
+      return;
+    }
+    const content = parsedUsers.map(u => `${u.email}----${u.password}`).join('\n');
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `users_${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function addUsers() {
+    if (parsedUsers.length === 0) {
+      setAddUserStatus("请先生成账号。");
+      return;
+    }
+    if (!authToken) {
+      setAddUserStatus("请先填写 Token。");
+      return;
+    }
+    setAddUserStatus("正在添加用户...");
+    setIsAddingUsers(true);
+    try {
+      await mailService.addUsers(parsedUsers, authToken);
+      setAddUserStatus("用户添加成功！");
+      setParsedUsers([]);
+    } catch (error) {
+      console.error(error);
+      setAddUserStatus(`错误: ${error}`);
+    } finally {
+      setIsAddingUsers(false);
+    }
+  }
+
+  function unlockBulkAdd() {
+    if (bulkAddPasswordInput === BULK_ADD_PASSWORD) {
+      sessionStorage.setItem(BULK_ADD_UNLOCK_KEY, "1");
+      setBulkAddUnlocked(true);
+      setBulkAddPasswordInput("");
+      setBulkAddPasswordStatus("");
+      return;
+    }
+    setBulkAddPasswordStatus("密码错误");
+  }
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -96,75 +194,185 @@ function App() {
       </header>
 
       <main className="main-content">
-        <div className="card fade-in">
-          <div className="card-header">
-            <h2>查询收件箱</h2>
-            <p className="subtitle">输入邮箱地址查看最新邮件</p>
-          </div>
-          <div className="search-container" style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-            <div style={{ flex: 1 }}>
-              <div className="search-bar" style={{ marginBottom: '1rem' }}>
-                <input
-                  type="email"
-                  placeholder="例如: test@dynmsl.com"
-                  value={toEmail}
-                  onChange={(e) => setToEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && fetchEmails()}
-                />
-                <button className="primary-btn" onClick={fetchEmails} disabled={isLoadingFetch}>
-                  {isLoadingFetch ? '查询中...' : '查询'}
-                </button>
-              </div>
-              {fetchStatus && <div className={`status-msg ${fetchStatus.includes('错误') ? 'error' : 'info'}`}>{fetchStatus}</div>}
-            </div>
+        <div className="tabs">
+          <button
+            className={`tab-btn ${activeTab === 'fetch' ? 'active' : ''}`}
+            onClick={() => setActiveTab('fetch')}
+          >
+            邮件查询
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'add' ? 'active' : ''}`}
+            onClick={() => setActiveTab('add')}
+          >
+            批量添加用户
+          </button>
+        </div>
 
-            {toEmail && (
-              <div className="qrcode-wrapper" style={{
-                padding: '10px',
-                background: 'white',
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                flexShrink: 0
-              }}>
-                <QRCodeSVG value={toEmail} size={100} level="M" />
+        <div className="tab-content">
+          {activeTab === 'fetch' && (
+            <div className="card fade-in">
+              <div className="card-header">
+                <h2>查询收件箱</h2>
+                <p className="subtitle">输入邮箱地址查看最新邮件</p>
               </div>
-            )}
-          </div>
-
-          <div className="email-list">
-            {emails.length === 0 ? (
-              <div className="empty-state">暂无邮件数据</div>
-            ) : (
-              emails.map((email) => (
-                <div key={email.emailId} className="email-item">
-                  <div className="email-row">
-                    <span className="label">主题:</span>
-                    <span className="value subject">{email.subject}</span>
-                  </div>
-                  <div className="email-row">
-                    <span className="label">发件人:</span>
-                    <span className="value">{email.sendName} &lt;{email.sendEmail}&gt;</span>
-                  </div>
-                  <div className="email-row">
-                    <span className="label">收件人:</span>
-                    <span className="value">{email.toName} &lt;{email.toEmail}&gt;</span>
-                  </div>
-                  <div className="email-row">
-                    <span className="label">时间:</span>
-                    <span className="value">{email.createTime}</span>
-                  </div>
-                  <div className="email-row content-row">
-                    <span className="label">内容:</span>
-                    <div
-                      className="value content-html"
-                      dangerouslySetInnerHTML={{ __html: email.content }}
+              <div className="search-container" style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                <div style={{ flex: 1 }}>
+                  <div className="search-bar" style={{ marginBottom: '1rem' }}>
+                    <input
+                      type="email"
+                      placeholder="例如: test@dynmsl.com"
+                      value={toEmail}
+                      onChange={(e) => setToEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && fetchEmails()}
                     />
+                    <button className="primary-btn" onClick={fetchEmails} disabled={isLoadingFetch}>
+                      {isLoadingFetch ? '查询中...' : '查询'}
+                    </button>
+                  </div>
+                  {fetchStatus && <div className={`status-msg ${fetchStatus.includes('错误') ? 'error' : 'info'}`}>{fetchStatus}</div>}
+                </div>
+
+                {toEmail && (
+                  <div className="qrcode-wrapper" style={{
+                    padding: '10px',
+                    background: 'white',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                    flexShrink: 0
+                  }}>
+                    <QRCodeSVG value={toEmail} size={100} level="M" />
+                  </div>
+                )}
+              </div>
+
+              <div className="email-list">
+                {emails.length === 0 ? (
+                  <div className="empty-state">暂无邮件数据</div>
+                ) : (
+                  emails.map((email) => (
+                    <div key={email.emailId} className="email-item">
+                      <div className="email-row">
+                        <span className="label">主题:</span>
+                        <span className="value subject">{email.subject}</span>
+                      </div>
+                      <div className="email-row">
+                        <span className="label">发件人:</span>
+                        <span className="value">{email.sendName} &lt;{email.sendEmail}&gt;</span>
+                      </div>
+                      <div className="email-row">
+                        <span className="label">收件人:</span>
+                        <span className="value">{email.toName} &lt;{email.toEmail}&gt;</span>
+                      </div>
+                      <div className="email-row">
+                        <span className="label">时间:</span>
+                        <span className="value">{email.createTime}</span>
+                      </div>
+                      <div className="email-row content-row">
+                        <span className="label">内容:</span>
+                        <div
+                          className="value content-html"
+                          dangerouslySetInnerHTML={{ __html: email.content }}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'add' && !bulkAddUnlocked && (
+            <div className="card fade-in">
+              <div className="card-header">
+                <h2>批量添加用户</h2>
+                <p className="subtitle">进入此页面需要本地验证密码</p>
+              </div>
+
+              <div className="bulk-actions">
+                <div className="input-group">
+                  <label>密码:</label>
+                  <input
+                    type="password"
+                    className="bulk-input"
+                    style={{ width: '220px' }}
+                    placeholder="请输入密码"
+                    value={bulkAddPasswordInput}
+                    onChange={e => setBulkAddPasswordInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && unlockBulkAdd()}
+                  />
+                </div>
+                <div className="action-buttons">
+                  <button className="primary-btn" onClick={unlockBulkAdd}>
+                    进入
+                  </button>
+                </div>
+              </div>
+
+              {bulkAddPasswordStatus && <div className="status-msg error">{bulkAddPasswordStatus}</div>}
+            </div>
+          )}
+
+          {activeTab === 'add' && bulkAddUnlocked && (
+            <div className="card fade-in">
+              <div className="card-header">
+                <h2>批量添加用户</h2>
+                <p className="subtitle">输入生成的账号数量，自动生成 @dynmsl.com 邮箱</p>
+              </div>
+
+              <div className="bulk-actions">
+                <div className="input-group">
+                  <label>生成数量:</label>
+                  <input
+                    type="number"
+                    className="bulk-input"
+                    style={{ width: '150px' }}
+                    placeholder="输入数量"
+                    value={accountCount}
+                    onChange={e => setAccountCount(parseInt(e.target.value) || 0)}
+                    min="1"
+                  />
+                </div>
+                <div className="action-buttons">
+                  <button className="secondary-btn" onClick={handleGenerateAccounts}>
+                    1. 生成随机账号
+                  </button>
+                  <button
+                    className="secondary-btn"
+                    onClick={handleExportTxt}
+                    disabled={parsedUsers.length === 0}
+                  >
+                    2. 导出 TXT
+                  </button>
+                  <button
+                    className="primary-btn"
+                    onClick={addUsers}
+                    disabled={parsedUsers.length === 0 || isAddingUsers}
+                  >
+                    {isAddingUsers ? '添加中...' : '3. 提交添加'}
+                  </button>
+                </div>
+              </div>
+
+              {addUserStatus && <div className={`status-msg ${addUserStatus.includes('错误') ? 'error' : 'success'}`}>{addUserStatus}</div>}
+
+              {parsedUsers.length > 0 && (
+                <div className="preview-list">
+                  <h3>待添加列表 ({parsedUsers.length})</h3>
+                  <div className="list-container">
+                    {parsedUsers.map((u, i) => (
+                      <div key={i} className="preview-item">
+                        <span className="email">{u.email}</span>
+                        <span className="divider">----</span>
+                        <span className="password">{u.password}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>
