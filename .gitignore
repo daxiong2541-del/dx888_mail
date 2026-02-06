@@ -12,7 +12,8 @@ dist
 dist-cf
 dist-ssr
 *.local
-neon
+.env
+.env.*
 
 # Editor directories and files
 .vscode/*

@@ -1,62 +1,35 @@
-create table if not exists mail_users (
-  email text primary key,
-  password text not null,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists emails (
-  id bigserial primary key,
-  tenant_id bigint,
-  send_email text,
-  send_name text,
-  subject text,
-  to_email text not null,
-  to_name text,
-  create_time timestamptz not null default now(),
-  type integer not null default 0,
-  content text,
-  text text,
-  is_del integer not null default 0
-);
-
-create index if not exists emails_to_email_create_time_idx on emails (to_email, create_time desc);
-create index if not exists emails_tenant_to_email_create_time_idx on emails (tenant_id, to_email, create_time desc);
+create extension if not exists pgcrypto;
 
 create table if not exists tenants (
-  id bigserial primary key,
-  name text not null unique,
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
   created_at timestamptz not null default now()
 );
 
-create table if not exists tenant_domains (
-  id bigserial primary key,
-  tenant_id bigint not null references tenants(id) on delete cascade,
-  domain text not null,
-  created_at timestamptz not null default now(),
-  unique (tenant_id, domain),
-  unique (domain)
-);
-
-create table if not exists app_users (
-  id bigserial primary key,
-  tenant_id bigint references tenants(id) on delete set null,
-  role text not null,
+create table if not exists users (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid references tenants(id) on delete cascade,
   email text not null unique,
   password_hash text not null,
+  role text not null check (role in ('admin', 'user')),
   created_at timestamptz not null default now()
 );
 
-create table if not exists guest_links (
-  id bigserial primary key,
-  tenant_id bigint references tenants(id) on delete cascade,
+create table if not exists mailboxes (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references tenants(id) on delete cascade,
+  email text not null,
+  created_at timestamptz not null default now(),
+  unique (tenant_id, email)
+);
+
+create table if not exists share_links (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references tenants(id) on delete cascade,
+  mailbox_id uuid not null references mailboxes(id) on delete cascade,
   token text not null unique,
-  scope_type text not null,
-  scope_value text not null,
-  max_uses integer not null default 0,
-  used_count integer not null default 0,
-  expires_at timestamptz,
-  created_by_user_id bigint references app_users(id) on delete set null,
+  max_queries int not null,
+  queries_used int not null default 0,
+  expires_at timestamptz not null,
   created_at timestamptz not null default now()
 );
-
-create index if not exists guest_links_token_idx on guest_links (token);

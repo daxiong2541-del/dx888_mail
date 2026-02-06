@@ -1,14 +1,19 @@
 import { neon } from "@neondatabase/serverless";
+import { optionalEnv, requireEnv } from "./env";
 
-function getDatabaseUrl() {
-  const url = process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error("Missing POSTGRES_URL/DATABASE_URL");
+let sqlInstance: any | null = null;
+
+function databaseUrl(): string {
+  return (
+    optionalEnv("DATABASE_URL") ??
+    optionalEnv("NEON_DATABASE_URL") ??
+    requireEnv("POSTGRES_URL")
+  );
+}
+
+export function sql(): any {
+  if (!sqlInstance) {
+    sqlInstance = neon(databaseUrl());
   }
-  return url;
+  return sqlInstance;
 }
-
-export function sql() {
-  return neon(getDatabaseUrl());
-}
-
