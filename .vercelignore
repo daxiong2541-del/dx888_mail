@@ -1,0 +1,6 @@
+node_modules
+src-tauri
+dist
+dist-cf
+dist-ssr
+*.log
