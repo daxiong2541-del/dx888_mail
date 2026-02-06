@@ -24,7 +24,15 @@ const isTauri = () => {
     return !!window.__TAURI_INTERNALS__;
 };
 
-const API_BASE_URL = "/api-proxy";
+const getApiBaseUrl = () => {
+  const stored = localStorage.getItem("apiBaseUrl");
+  if (stored) return stored.replace(/\/+$/g, "");
+
+  const apiKey = localStorage.getItem("apiKey") ?? "";
+  if (apiKey) return `/api/${encodeURIComponent(apiKey)}/public`;
+
+  return "/api-proxy";
+};
 
 export const mailService = {
   fetchEmails: async (toEmail: string, token?: string): Promise<Email[]> => {
@@ -35,6 +43,7 @@ export const mailService = {
       if (!resolvedToken) {
         throw new Error("Missing authorization token");
       }
+      const API_BASE_URL = getApiBaseUrl();
       const response = await fetch(`${API_BASE_URL}/emailList`, {
         method: "POST",
         headers: {
@@ -63,6 +72,7 @@ export const mailService = {
       if (!resolvedToken) {
         throw new Error("Missing authorization token");
       }
+      const API_BASE_URL = getApiBaseUrl();
       const response = await fetch(`${API_BASE_URL}/addUser`, {
         method: "POST",
         headers: {

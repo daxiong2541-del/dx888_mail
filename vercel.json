@@ -6,7 +6,7 @@
       "destination": "https://mail.dynmsl.com/api/public/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|api-proxy/).*)",
       "destination": "/index.html"
     }
   ]

@@ -9,6 +9,8 @@ const BULK_ADD_UNLOCK_KEY = "bulkAddUnlocked";
 
 function App() {
   const [authToken, setAuthToken] = useState(() => localStorage.getItem("authToken") ?? DEFAULT_TEST_TOKEN);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("apiKey") ?? "v1");
+  const [apiBaseUrl, setApiBaseUrl] = useState(() => localStorage.getItem("apiBaseUrl") ?? "");
   const [activeTab, setActiveTab] = useState<'fetch' | 'add'>('fetch');
   const [bulkAddUnlocked, setBulkAddUnlocked] = useState(() => sessionStorage.getItem(BULK_ADD_UNLOCK_KEY) === "1");
   const [bulkAddPasswordInput, setBulkAddPasswordInput] = useState("");
@@ -29,6 +31,18 @@ function App() {
   useEffect(() => {
     localStorage.setItem("authToken", authToken);
   }, [authToken]);
+
+  useEffect(() => {
+    localStorage.setItem("apiKey", apiKey);
+  }, [apiKey]);
+
+  useEffect(() => {
+    if (apiBaseUrl) {
+      localStorage.setItem("apiBaseUrl", apiBaseUrl);
+      return;
+    }
+    localStorage.removeItem("apiBaseUrl");
+  }, [apiBaseUrl]);
 
   useEffect(() => {
     // Check for email in URL path
@@ -188,6 +202,25 @@ function App() {
                 type="text" 
                 value={authToken} 
                 onChange={e => setAuthToken(e.target.value)} 
+                className="auth-input"
+            />
+        </div>
+        <div className="auth-settings">
+           <span>API Key:</span>
+           <input
+                type="text"
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                className="auth-input"
+            />
+        </div>
+        <div className="auth-settings">
+           <span>API:</span>
+           <input
+                type="text"
+                value={apiBaseUrl}
+                onChange={e => setApiBaseUrl(e.target.value)}
+                placeholder={`/api/${apiKey}/public`}
                 className="auth-input"
             />
         </div>

@@ -12,6 +12,7 @@ dist
 dist-cf
 dist-ssr
 *.local
+neon
 
 # Editor directories and files
 .vscode/*
