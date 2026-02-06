@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { requireApiKey, requireAuthToken } from "../../_lib/auth";
+import { requireApiKey } from "../../_lib/auth";
+import { getSession } from "../../_lib/session";
 import { sql } from "../../_lib/db";
 import { badRequest, json, methodNotAllowed } from "../../_lib/response";
 
@@ -8,16 +9,23 @@ type UserInput = {
   password: string;
 };
 
+function isAdminByToken(req: VercelRequest) {
+  const token = process.env.DX888_AUTH_TOKEN ?? "";
+  if (!token) return false;
+  return (req.headers.authorization ?? "") === token;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return methodNotAllowed(res);
   if (!requireApiKey(req, res)) return;
-  if (!requireAuthToken(req, res)) return;
+
+  const session = getSession(req);
+  const isAdmin = session?.role === "admin" || isAdminByToken(req);
+  if (!isAdmin) return json(res, 200, { code: 403, message: "forbidden" });
 
   const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
   const list = body?.list;
-  if (!Array.isArray(list) || list.length === 0) {
-    return badRequest(res, "Missing list");
-  }
+  if (!Array.isArray(list) || list.length === 0) return badRequest(res, "Missing list");
 
   const users: UserInput[] = [];
   for (const item of list) {
@@ -41,3 +49,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   return json(res, 200, { code: 200, message: "success" });
 }
+

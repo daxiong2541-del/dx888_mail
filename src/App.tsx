@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { QRCodeSVG } from 'qrcode.react';
 import "./App.css";
-import { mailService, Email, User } from "./services/api";
+import { mailService, Email, User, authService, adminService, guestService, AuthMe, Tenant, TenantDomain, AppUser, GuestLink } from "./services/api";
 
 const DEFAULT_TEST_TOKEN = "87e2bd40-7208-4a43-8043-c0fda2fed1fb";
 const BULK_ADD_PASSWORD = "dx888";
@@ -11,16 +11,55 @@ function App() {
   const [authToken, setAuthToken] = useState(() => localStorage.getItem("authToken") ?? DEFAULT_TEST_TOKEN);
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("apiKey") ?? "v1");
   const [apiBaseUrl, setApiBaseUrl] = useState(() => localStorage.getItem("apiBaseUrl") ?? "");
-  const [activeTab, setActiveTab] = useState<'fetch' | 'add'>('fetch');
+  const [activeTab, setActiveTab] = useState<'fetch' | 'add' | 'admin'>('fetch');
   const [bulkAddUnlocked, setBulkAddUnlocked] = useState(() => sessionStorage.getItem(BULK_ADD_UNLOCK_KEY) === "1");
   const [bulkAddPasswordInput, setBulkAddPasswordInput] = useState("");
   const [bulkAddPasswordStatus, setBulkAddPasswordStatus] = useState("");
+
+  const [me, setMe] = useState<AuthMe>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginStatus, setLoginStatus] = useState("");
+
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState<number | null>(null);
+  const [domains, setDomains] = useState<TenantDomain[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [guestLinks, setGuestLinks] = useState<GuestLink[]>([]);
+
+  const [newTenantName, setNewTenantName] = useState("");
+  const [newDomain, setNewDomain] = useState("");
+
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState<"admin" | "user">("user");
+  const [newUserTenantId, setNewUserTenantId] = useState<number | null>(null);
+
+  const [guestScopeType, setGuestScopeType] = useState<"email" | "domain">("email");
+  const [guestScopeValue, setGuestScopeValue] = useState("");
+  const [guestMaxUses, setGuestMaxUses] = useState<number>(10);
+  const [guestExpiresAt, setGuestExpiresAt] = useState<string>("");
+  const [guestCreatedLink, setGuestCreatedLink] = useState<string>("");
+
+  const [adminEmailQuery, setAdminEmailQuery] = useState("");
+  const [adminEmailStatus, setAdminEmailStatus] = useState("");
+  const [adminEmailResults, setAdminEmailResults] = useState<Email[]>([]);
+  const [adminEmailLoading, setAdminEmailLoading] = useState(false);
   
   // Fetch Email State
   const [toEmail, setToEmail] = useState("");
   const [emails, setEmails] = useState<Email[]>([]);
   const [fetchStatus, setFetchStatus] = useState("");
   const [isLoadingFetch, setIsLoadingFetch] = useState(false);
+
+  const pathname = window.location.pathname;
+  const isGuestPage = pathname.startsWith("/g/");
+  const guestToken = isGuestPage ? decodeURIComponent(pathname.slice(3).split("/")[0] ?? "") : "";
+  const [guestToEmail, setGuestToEmail] = useState("");
+  const [guestEmails, setGuestEmails] = useState<Email[]>([]);
+  const [guestStatus, setGuestStatus] = useState("");
+  const [guestLoading, setGuestLoading] = useState(false);
 
   // Add User State
   const [accountCount, setAccountCount] = useState<number>(10);
@@ -45,6 +84,23 @@ function App() {
   }, [apiBaseUrl]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const current = await authService.me();
+        if (cancelled) return;
+        setMe(current);
+        if (current?.role === "user") setActiveTab("fetch");
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     // Check for email in URL path
     let path = window.location.pathname;
     // Remove leading and trailing slashes
@@ -63,7 +119,10 @@ function App() {
     
     console.log("[App] Decoded path:", decodedPath);
 
-    // Check if the decoded path looks like an email (contains @)
+    if (decodedPath.startsWith("g/")) {
+        return;
+    }
+
     if (decodedPath && decodedPath.length > 3 && decodedPath.includes('@')) {
         console.log("[App] Found email in URL:", decodedPath);
         
@@ -86,10 +145,6 @@ function App() {
     
     if (!targetEmail) {
         setFetchStatus("请输入邮箱地址。");
-        return;
-    }
-    if (!authToken) {
-        setFetchStatus("请先填写 Token。");
         return;
     }
     setFetchStatus("获取中...");
@@ -163,10 +218,6 @@ function App() {
       setAddUserStatus("请先生成账号。");
       return;
     }
-    if (!authToken) {
-      setAddUserStatus("请先填写 Token。");
-      return;
-    }
     setAddUserStatus("正在添加用户...");
     setIsAddingUsers(true);
     try {
@@ -190,6 +241,118 @@ function App() {
       return;
     }
     setBulkAddPasswordStatus("密码错误");
+  }
+
+  async function handleLogin() {
+    setLoginStatus("");
+    try {
+      await authService.login(loginEmail, loginPassword);
+      const current = await authService.me();
+      setMe(current);
+      setLoginPassword("");
+      setActiveTab("fetch");
+    } catch (e) {
+      setLoginStatus(`错误: ${e}`);
+    }
+  }
+
+  async function handleLogout() {
+    await authService.logout();
+    setMe(null);
+    setActiveTab("fetch");
+  }
+
+  async function refreshAdminData(nextTenantId?: number | null) {
+    const t = await adminService.listTenants();
+    setTenants(t);
+    const u = await adminService.listUsers();
+    setUsers(u);
+    const g = await adminService.listGuestLinks();
+    setGuestLinks(g);
+    const tenantIdToUse = typeof nextTenantId === "number" ? nextTenantId : selectedTenantId ?? t?.[0]?.id ?? null;
+    setSelectedTenantId(tenantIdToUse);
+    setNewUserTenantId(tenantIdToUse);
+    if (tenantIdToUse) {
+      const d = await adminService.listDomains(tenantIdToUse);
+      setDomains(d);
+    } else {
+      setDomains([]);
+    }
+  }
+
+  useEffect(() => {
+    if (me?.role !== "admin") return;
+    if (activeTab !== "admin") return;
+    refreshAdminData().catch(() => {});
+  }, [activeTab, me?.role]);
+
+  async function createTenant() {
+    if (!newTenantName) return;
+    const created = await adminService.createTenant(newTenantName);
+    setNewTenantName("");
+    await refreshAdminData(created.id);
+  }
+
+  async function addTenantDomain() {
+    if (!selectedTenantId) return;
+    if (!newDomain) return;
+    await adminService.addDomain(selectedTenantId, newDomain);
+    setNewDomain("");
+    await refreshAdminData(selectedTenantId);
+  }
+
+  async function upsertAppUser() {
+    if (!newUserEmail || !newUserPassword) return;
+    const tenantId = newUserRole === "user" ? newUserTenantId : null;
+    await adminService.upsertUser({ email: newUserEmail, password: newUserPassword, role: newUserRole, tenantId });
+    setNewUserEmail("");
+    setNewUserPassword("");
+    await refreshAdminData(selectedTenantId);
+  }
+
+  async function createGuestLink() {
+    if (!selectedTenantId) return;
+    const expiresAt = guestExpiresAt ? new Date(guestExpiresAt).toISOString() : null;
+    const created = await adminService.createGuestLink({
+      tenantId: selectedTenantId,
+      scopeType: guestScopeType,
+      scopeValue: guestScopeValue,
+      maxUses: guestMaxUses,
+      expiresAt,
+    });
+    const base = window.location.origin;
+    setGuestCreatedLink(`${base}/g/${created.token}`);
+    setGuestScopeValue("");
+    await refreshAdminData(selectedTenantId);
+  }
+
+  async function adminSearchEmails() {
+    setAdminEmailStatus("");
+    setAdminEmailLoading(true);
+    try {
+      const rows = await adminService.adminEmails(adminEmailQuery || undefined);
+      setAdminEmailResults(rows);
+      setAdminEmailStatus(`找到 ${rows.length} 封邮件。`);
+    } catch (e) {
+      setAdminEmailStatus(`错误: ${e}`);
+    } finally {
+      setAdminEmailLoading(false);
+    }
+  }
+
+  async function guestFetch() {
+    if (!guestToken) return;
+    setGuestLoading(true);
+    setGuestStatus("查询中...");
+    try {
+      const rows = await guestService.fetchEmails(guestToken, guestToEmail || undefined);
+      setGuestEmails(rows);
+      setGuestStatus(`找到 ${rows.length} 封邮件。`);
+    } catch (e) {
+      setGuestStatus(`错误: ${e}`);
+    } finally {
+      setGuestLoading(false);
+    }
   }
 
   return (
@@ -220,29 +383,134 @@ function App() {
                 type="text"
                 value={apiBaseUrl}
                 onChange={e => setApiBaseUrl(e.target.value)}
-                placeholder={`/api/${apiKey}/public`}
+                placeholder={`/api/${apiKey}`}
                 className="auth-input"
             />
         </div>
+        {!authLoading && !isGuestPage && (
+          <div className="auth-settings">
+            {me ? (
+              <>
+                <span>{me.role}</span>
+                <button className="secondary-btn" onClick={handleLogout}>
+                  退出
+                </button>
+              </>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="登录邮箱"
+                  className="auth-input"
+                />
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="登录密码"
+                  className="auth-input"
+                />
+                <button className="primary-btn" onClick={handleLogin}>
+                  登录
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        {!isGuestPage && loginStatus && (
+          <div className={`status-msg ${loginStatus.includes('错误') ? 'error' : 'info'}`}>{loginStatus}</div>
+        )}
       </header>
 
       <main className="main-content">
-        <div className="tabs">
-          <button
-            className={`tab-btn ${activeTab === 'fetch' ? 'active' : ''}`}
-            onClick={() => setActiveTab('fetch')}
-          >
-            邮件查询
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'add' ? 'active' : ''}`}
-            onClick={() => setActiveTab('add')}
-          >
-            批量添加用户
-          </button>
-        </div>
+        {isGuestPage ? (
+          <div className="card fade-in">
+            <div className="card-header">
+              <h2>游客查询</h2>
+              <p className="subtitle">链接有效期与次数由管理员控制</p>
+            </div>
+            <div className="bulk-actions">
+              <div className="input-group">
+                <label>邮箱:</label>
+                <input
+                  type="email"
+                  className="bulk-input"
+                  style={{ width: '320px' }}
+                  placeholder="如果是邮箱链接可留空"
+                  value={guestToEmail}
+                  onChange={(e) => setGuestToEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && guestFetch()}
+                />
+              </div>
+              <div className="action-buttons">
+                <button className="primary-btn" onClick={guestFetch} disabled={guestLoading}>
+                  {guestLoading ? "查询中..." : "查询"}
+                </button>
+              </div>
+            </div>
+            {guestStatus && <div className={`status-msg ${guestStatus.includes('错误') ? 'error' : 'info'}`}>{guestStatus}</div>}
+            <div className="email-list">
+              {guestEmails.length === 0 ? (
+                <div className="empty-state">暂无邮件数据</div>
+              ) : (
+                guestEmails.map((email) => (
+                  <div key={email.emailId} className="email-item">
+                    <div className="email-row">
+                      <span className="label">主题:</span>
+                      <span className="value subject">{email.subject}</span>
+                    </div>
+                    <div className="email-row">
+                      <span className="label">发件人:</span>
+                      <span className="value">{email.sendName} &lt;{email.sendEmail}&gt;</span>
+                    </div>
+                    <div className="email-row">
+                      <span className="label">收件人:</span>
+                      <span className="value">{email.toName} &lt;{email.toEmail}&gt;</span>
+                    </div>
+                    <div className="email-row">
+                      <span className="label">时间:</span>
+                      <span className="value">{email.createTime}</span>
+                    </div>
+                    <div className="email-row content-row">
+                      <span className="label">内容:</span>
+                      <div
+                        className="value content-html"
+                        dangerouslySetInnerHTML={{ __html: email.content }}
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        ) : (
+        <>
+          <div className="tabs">
+            <button
+              className={`tab-btn ${activeTab === 'fetch' ? 'active' : ''}`}
+              onClick={() => setActiveTab('fetch')}
+            >
+              邮件查询
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'add' ? 'active' : ''}`}
+              onClick={() => setActiveTab('add')}
+            >
+              批量添加用户
+            </button>
+            {me?.role === "admin" && (
+              <button
+                className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
+                onClick={() => setActiveTab('admin')}
+              >
+                账户管理
+              </button>
+            )}
+          </div>
 
-        <div className="tab-content">
+          <div className="tab-content">
           {activeTab === 'fetch' && (
             <div className="card fade-in">
               <div className="card-header">
@@ -406,7 +674,276 @@ function App() {
               )}
             </div>
           )}
-        </div>
+
+          {activeTab === 'admin' && me?.role === "admin" && (
+            <div className="card fade-in">
+              <div className="card-header">
+                <h2>账户管理</h2>
+                <p className="subtitle">租户隔离、账号管理、游客链接</p>
+              </div>
+
+              <div className="bulk-actions">
+                <div className="input-group">
+                  <label>新租户:</label>
+                  <input
+                    type="text"
+                    className="bulk-input"
+                    style={{ width: '220px' }}
+                    placeholder="例如: tenant-a"
+                    value={newTenantName}
+                    onChange={(e) => setNewTenantName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && createTenant()}
+                  />
+                </div>
+                <div className="action-buttons">
+                  <button className="secondary-btn" onClick={createTenant}>
+                    创建/更新租户
+                  </button>
+                  <button className="secondary-btn" onClick={() => refreshAdminData()}>
+                    刷新
+                  </button>
+                </div>
+              </div>
+
+              <div className="bulk-actions">
+                <div className="input-group">
+                  <label>当前租户:</label>
+                  <select
+                    className="bulk-input"
+                    style={{ width: '220px' }}
+                    value={selectedTenantId ?? ""}
+                    onChange={async (e) => {
+                      const id = e.target.value ? Number(e.target.value) : null;
+                      setSelectedTenantId(id);
+                      setNewUserTenantId(id);
+                      if (id) setDomains(await adminService.listDomains(id));
+                    }}
+                  >
+                    <option value="">请选择</option>
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="bulk-actions">
+                <div className="input-group">
+                  <label>域名:</label>
+                  <input
+                    type="text"
+                    className="bulk-input"
+                    style={{ width: '220px' }}
+                    placeholder="例如: dynmsl.com"
+                    value={newDomain}
+                    onChange={(e) => setNewDomain(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addTenantDomain()}
+                  />
+                </div>
+                <div className="action-buttons">
+                  <button className="secondary-btn" onClick={addTenantDomain} disabled={!selectedTenantId}>
+                    添加域名
+                  </button>
+                </div>
+              </div>
+
+              {domains.length > 0 && (
+                <div className="preview-list">
+                  <h3>域名列表 ({domains.length})</h3>
+                  <div className="list-container">
+                    {domains.map((d) => (
+                      <div key={d.id} className="preview-item">
+                        <span className="email">{d.domain}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="bulk-actions">
+                <div className="input-group">
+                  <label>账号:</label>
+                  <input
+                    type="text"
+                    className="bulk-input"
+                    style={{ width: '240px' }}
+                    placeholder="登录邮箱"
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                  />
+                </div>
+                <div className="input-group">
+                  <label>密码:</label>
+                  <input
+                    type="text"
+                    className="bulk-input"
+                    style={{ width: '200px' }}
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                  />
+                </div>
+                <div className="input-group">
+                  <label>角色:</label>
+                  <select
+                    className="bulk-input"
+                    style={{ width: '120px' }}
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value as "admin" | "user")}
+                  >
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label>租户:</label>
+                  <select
+                    className="bulk-input"
+                    style={{ width: '160px' }}
+                    value={newUserTenantId ?? ""}
+                    disabled={newUserRole === "admin"}
+                    onChange={(e) => setNewUserTenantId(e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">请选择</option>
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="action-buttons">
+                  <button className="primary-btn" onClick={upsertAppUser}>
+                    创建/更新账号
+                  </button>
+                </div>
+              </div>
+
+              {users.length > 0 && (
+                <div className="preview-list">
+                  <h3>账号列表 ({users.length})</h3>
+                  <div className="list-container">
+                    {users.map((u) => (
+                      <div key={u.id} className="preview-item">
+                        <span className="email">{u.email}</span>
+                        <span className="divider">----</span>
+                        <span className="password">{u.role}{u.tenant_id ? `@${u.tenant_id}` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="bulk-actions">
+                <div className="input-group">
+                  <label>游客类型:</label>
+                  <select
+                    className="bulk-input"
+                    style={{ width: '160px' }}
+                    value={guestScopeType}
+                    onChange={(e) => setGuestScopeType(e.target.value as "email" | "domain")}
+                  >
+                    <option value="email">邮箱</option>
+                    <option value="domain">域名</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label>值:</label>
+                  <input
+                    type="text"
+                    className="bulk-input"
+                    style={{ width: '260px' }}
+                    placeholder={guestScopeType === "email" ? "例如: a@dynmsl.com" : "例如: dynmsl.com"}
+                    value={guestScopeValue}
+                    onChange={(e) => setGuestScopeValue(e.target.value)}
+                  />
+                </div>
+                <div className="input-group">
+                  <label>次数:</label>
+                  <input
+                    type="number"
+                    className="bulk-input"
+                    style={{ width: '120px' }}
+                    value={guestMaxUses}
+                    onChange={(e) => setGuestMaxUses(parseInt(e.target.value) || 0)}
+                    min="0"
+                  />
+                </div>
+                <div className="input-group">
+                  <label>到期:</label>
+                  <input
+                    type="datetime-local"
+                    className="bulk-input"
+                    style={{ width: '220px' }}
+                    value={guestExpiresAt}
+                    onChange={(e) => setGuestExpiresAt(e.target.value)}
+                  />
+                </div>
+                <div className="action-buttons">
+                  <button className="secondary-btn" onClick={createGuestLink} disabled={!selectedTenantId}>
+                    生成游客链接
+                  </button>
+                </div>
+              </div>
+
+              {guestCreatedLink && (
+                <div className="status-msg success">
+                  {guestCreatedLink}
+                </div>
+              )}
+
+              {guestLinks.length > 0 && (
+                <div className="preview-list">
+                  <h3>游客链接 ({guestLinks.length})</h3>
+                  <div className="list-container">
+                    {guestLinks.slice(0, 30).map((g) => (
+                      <div key={g.id} className="preview-item">
+                        <span className="email">{g.scope_type}:{g.scope_value}</span>
+                        <span className="divider">----</span>
+                        <span className="password">{g.used_count}/{g.max_uses || "∞"} {g.expires_at ?? ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="bulk-actions">
+                <div className="input-group">
+                  <label>全局查询:</label>
+                  <input
+                    type="text"
+                    className="bulk-input"
+                    style={{ width: '320px' }}
+                    placeholder="toEmail 留空查询最近"
+                    value={adminEmailQuery}
+                    onChange={(e) => setAdminEmailQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && adminSearchEmails()}
+                  />
+                </div>
+                <div className="action-buttons">
+                  <button className="primary-btn" onClick={adminSearchEmails} disabled={adminEmailLoading}>
+                    {adminEmailLoading ? "查询中..." : "查询"}
+                  </button>
+                </div>
+              </div>
+              {adminEmailStatus && <div className={`status-msg ${adminEmailStatus.includes('错误') ? 'error' : 'info'}`}>{adminEmailStatus}</div>}
+
+              {adminEmailResults.length > 0 && (
+                <div className="preview-list">
+                  <h3>邮件结果 ({adminEmailResults.length})</h3>
+                  <div className="list-container">
+                    {adminEmailResults.slice(0, 50).map((e) => (
+                      <div key={e.emailId} className="preview-item">
+                        <span className="email">{e.toEmail}</span>
+                        <span className="divider">----</span>
+                        <span className="password">{e.subject}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          </div>
+        </>
+        )}
       </main>
     </div>
   );

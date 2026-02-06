@@ -4,22 +4,7 @@ create table if not exists mail_users (
   created_at timestamptz not null default now()
 );
 
-create table if not exists emails (
-  id bigserial primary key,
-  tenant_id bigint,
-  send_email text,
-  send_name text,
-  subject text,
-  to_email text not null,
-  to_name text,
-  create_time timestamptz not null default now(),
-  type integer not null default 0,
-  content text,
-  text text,
-  is_del integer not null default 0
-);
-
-create index if not exists emails_to_email_create_time_idx on emails (to_email, create_time desc);
+alter table if exists emails add column if not exists tenant_id bigint;
 create index if not exists emails_tenant_to_email_create_time_idx on emails (tenant_id, to_email, create_time desc);
 
 create table if not exists tenants (
