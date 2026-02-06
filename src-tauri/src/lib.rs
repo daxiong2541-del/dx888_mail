@@ -1,7 +1,10 @@
+#![allow(non_snake_case)]
+
 use serde::{Deserialize, Serialize};
 use std::env;
 
 #[derive(Serialize, Deserialize, Debug)]
+#[allow(non_snake_case)]
 pub struct Email {
     pub emailId: i32,
     pub sendEmail: String,
@@ -99,6 +102,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![fetch_emails, add_users])
-        .run(tauri::generate_context!())
+        .run(tauri::tauri_build_context!())
         .expect("error while running tauri application");
 }
