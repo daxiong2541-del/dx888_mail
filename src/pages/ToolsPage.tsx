@@ -1,4 +1,4 @@
-import { useState, useEffect, type ClipboardEvent } from "react";
+import { useState, useEffect, type ClipboardEvent as ReactClipboardEvent } from "react";
 import { useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import "../App.css";
@@ -9,6 +9,7 @@ const BULK_ADD_PASSWORD = "dx888";
 const BULK_ADD_UNLOCK_KEY = "bulkAddUnlocked";
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 12;
+const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 
 export default function ToolsPage() {
   const { email: routeEmail = "" } = useParams<{ email: string }>();
@@ -32,6 +33,20 @@ export default function ToolsPage() {
     localStorage.setItem("authToken", authToken);
   }, [authToken]);
 
+  function tryAutoQueryFromText(text: string, delay = 100) {
+    const match = text.match(EMAIL_REGEX);
+    if (!match?.[0]) return false;
+    const detectedEmail = match[0];
+    setActiveTab("fetch");
+    setToEmail(detectedEmail);
+    setFetchStatus(`检测到邮箱 ${detectedEmail}，正在自动查询...`);
+    setIsLoadingFetch(true);
+    setTimeout(() => {
+      fetchEmails(detectedEmail);
+    }, delay);
+    return true;
+  }
+
   useEffect(() => {
     if (!routeEmail) return;
     let decodedEmail = "";
@@ -40,31 +55,34 @@ export default function ToolsPage() {
     } catch {
       decodedEmail = routeEmail;
     }
-    const match = decodedEmail.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
-    if (match?.[0]) {
-      const detectedEmail = match[0];
-      setActiveTab("fetch");
-      setToEmail(detectedEmail);
-      setFetchStatus(`检测到邮箱 ${detectedEmail}，正在自动查询...`);
-      setIsLoadingFetch(true);
-      setTimeout(() => {
-        fetchEmails(detectedEmail);
-      }, 500);
-    }
+    tryAutoQueryFromText(decodedEmail, 500);
   }, [routeEmail]);
 
-  function handlePasteFetchEmail(e: ClipboardEvent<HTMLInputElement>) {
+  useEffect(() => {
+    const handleWindowPaste = (e: ClipboardEvent) => {
+      if (e.defaultPrevented) return;
+      const target = e.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+      const text = e.clipboardData?.getData("text") ?? "";
+      tryAutoQueryFromText(text);
+    };
+    window.addEventListener("paste", handleWindowPaste);
+    return () => {
+      window.removeEventListener("paste", handleWindowPaste);
+    };
+  }, []);
+
+  function handlePasteFetchEmail(e: ReactClipboardEvent<HTMLInputElement>) {
     const text = e.clipboardData.getData("text");
-    const match = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
-    if (!match?.[0]) return;
-    const detectedEmail = match[0];
-    setActiveTab("fetch");
-    setToEmail(detectedEmail);
-    setFetchStatus(`检测到邮箱 ${detectedEmail}，正在自动查询...`);
-    setIsLoadingFetch(true);
-    setTimeout(() => {
-      fetchEmails(detectedEmail);
-    }, 100);
+    if (!EMAIL_REGEX.test(text)) return;
+    e.preventDefault();
+    tryAutoQueryFromText(text);
   }
 
   async function fetchEmails(emailToFetch?: string | unknown) {
