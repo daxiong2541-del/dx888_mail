@@ -3,6 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import "../App.css";
 import { backend } from "../services/backend";
 
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 12;
+const FORBIDDEN_PASSWORD_CHARS = /[o0L71i]/;
+
 export default function AdminPage() {
   const navigate = useNavigate();
   const [me, setMe] = useState<{ email: string; role: "admin" | "user" } | null>(null);
@@ -49,6 +53,14 @@ export default function AdminPage() {
     try {
       if (!newEmail || !newPassword) {
         setStatus("错误: 请填写邮箱和密码");
+        return;
+      }
+      if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+        setStatus(`错误: 密码长度需为 ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} 位`);
+        return;
+      }
+      if (FORBIDDEN_PASSWORD_CHARS.test(newPassword)) {
+        setStatus("错误: 密码不能包含 o、0、L、7、1、i");
         return;
       }
       await backend.adminCreateUser(newEmail, newPassword, newTenant || newEmail);
@@ -125,7 +137,7 @@ export default function AdminPage() {
                 style={{ width: "320px" }}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="设置登录密码"
+                placeholder="8-12位，且不含 o 0 L 7 1 i"
               />
             </div>
             <div className="input-group">

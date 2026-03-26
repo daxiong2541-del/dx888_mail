@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ClipboardEvent } from "react";
+import { useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import "../App.css";
 import { mailService, Email, User } from "../services/api";
@@ -6,8 +7,11 @@ import { mailService, Email, User } from "../services/api";
 const DEFAULT_TEST_TOKEN = "87e2bd40-7208-4a43-8043-c0fda2fed1fb";
 const BULK_ADD_PASSWORD = "dx888";
 const BULK_ADD_UNLOCK_KEY = "bulkAddUnlocked";
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 12;
 
 export default function ToolsPage() {
+  const { email: routeEmail = "" } = useParams<{ email: string }>();
   const [authToken, setAuthToken] = useState(() => localStorage.getItem("authToken") ?? DEFAULT_TEST_TOKEN);
   const [activeTab, setActiveTab] = useState<"fetch" | "add">("fetch");
   const [bulkAddUnlocked, setBulkAddUnlocked] = useState(() => sessionStorage.getItem(BULK_ADD_UNLOCK_KEY) === "1");
@@ -29,25 +33,39 @@ export default function ToolsPage() {
   }, [authToken]);
 
   useEffect(() => {
-    let path = window.location.pathname;
-    path = path.replace(/^\/+|\/+$/g, "");
-
-    let decodedPath = "";
+    if (!routeEmail) return;
+    let decodedEmail = "";
     try {
-      decodedPath = decodeURIComponent(path);
+      decodedEmail = decodeURIComponent(routeEmail);
     } catch {
-      decodedPath = path;
+      decodedEmail = routeEmail;
     }
-
-    if (decodedPath && decodedPath.length > 3 && decodedPath.includes("@") && !decodedPath.startsWith("s/")) {
-      setToEmail(decodedPath);
-      setFetchStatus(`检测到邮箱 ${decodedPath}，正在自动查询...`);
+    const match = decodedEmail.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    if (match?.[0]) {
+      const detectedEmail = match[0];
+      setActiveTab("fetch");
+      setToEmail(detectedEmail);
+      setFetchStatus(`检测到邮箱 ${detectedEmail}，正在自动查询...`);
       setIsLoadingFetch(true);
       setTimeout(() => {
-        fetchEmails(decodedPath);
+        fetchEmails(detectedEmail);
       }, 500);
     }
-  }, []);
+  }, [routeEmail]);
+
+  function handlePasteFetchEmail(e: ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData.getData("text");
+    const match = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    if (!match?.[0]) return;
+    const detectedEmail = match[0];
+    setActiveTab("fetch");
+    setToEmail(detectedEmail);
+    setFetchStatus(`检测到邮箱 ${detectedEmail}，正在自动查询...`);
+    setIsLoadingFetch(true);
+    setTimeout(() => {
+      fetchEmails(detectedEmail);
+    }, 100);
+  }
 
   async function fetchEmails(emailToFetch?: string | unknown) {
     const targetEmail = typeof emailToFetch === "string" ? emailToFetch : toEmail;
@@ -82,8 +100,10 @@ export default function ToolsPage() {
     return ret;
   }
 
-  function generatePassword(length = 10) {
-    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  function generatePassword() {
+    const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ2345689";
+    const length =
+      Math.floor(Math.random() * (MAX_PASSWORD_LENGTH - MIN_PASSWORD_LENGTH + 1)) + MIN_PASSWORD_LENGTH;
     let ret = "";
     for (let i = 0; i < length; ++i) {
       ret += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -201,6 +221,7 @@ export default function ToolsPage() {
                       placeholder="例如: test@dynmsl.com"
                       value={toEmail}
                       onChange={(e) => setToEmail(e.target.value)}
+                      onPaste={handlePasteFetchEmail}
                       onKeyDown={(e) => e.key === "Enter" && fetchEmails()}
                     />
                     <button className="primary-btn" onClick={fetchEmails} disabled={isLoadingFetch}>
@@ -359,4 +380,3 @@ export default function ToolsPage() {
     </div>
   );
 }
-

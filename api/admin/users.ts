@@ -3,6 +3,9 @@ import { readJson, sendJson, methodNotAllowed } from "../_lib/http";
 import { sql } from "../_lib/db";
 
 type CreateBody = { email?: string; password?: string; tenantName?: string };
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 12;
+const FORBIDDEN_PASSWORD_CHARS = /[o0L71i]/;
 
 export default async function handler(req: any, res: any) {
   try {
@@ -38,6 +41,12 @@ export default async function handler(req: any, res: any) {
       const password = body.password ?? "";
       const tenantName = (body.tenantName ?? "").trim() || email;
       if (!email || !password) return sendJson(res, 400, { error: "Missing email or password" });
+      if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+        return sendJson(res, 400, { error: `Password length must be ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH}` });
+      }
+      if (FORBIDDEN_PASSWORD_CHARS.test(password)) {
+        return sendJson(res, 400, { error: "Password cannot contain o, 0, L, 7, 1, i" });
+      }
 
       const existing = await db<{ id: string }>`select id from users where email = ${email} limit 1`;
       if (existing[0]) return sendJson(res, 409, { error: "Email already exists" });
@@ -59,4 +68,3 @@ export default async function handler(req: any, res: any) {
     return sendJson(res, 401, { error: e?.message ?? "Unauthorized" });
   }
 }
-
