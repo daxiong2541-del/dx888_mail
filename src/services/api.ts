@@ -31,7 +31,7 @@ export const mailService = {
     if (isTauri()) {
       return await invoke<Email[]>("fetch_emails", { toEmail });
     } else {
-      const resolvedToken = token ?? "";
+      const resolvedToken = (token ?? "").trim();
       if (!resolvedToken) {
         throw new Error("Missing authorization token");
       }
@@ -59,7 +59,7 @@ export const mailService = {
       });
     } else {
       const requestBody = { list: users };
-      const resolvedToken = token ?? "";
+      const resolvedToken = (token ?? "").trim();
       if (!resolvedToken) {
         throw new Error("Missing authorization token");
       }

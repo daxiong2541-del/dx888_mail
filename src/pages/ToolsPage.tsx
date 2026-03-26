@@ -4,7 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import "../App.css";
 import { mailService, Email, User } from "../services/api";
 
-const DEFAULT_TEST_TOKEN = "87e2bd40-7208-4a43-8043-c0fda2fed1fb";
+const DEFAULT_TEST_TOKEN = "8d66ef93-beef-42da-baa3-2d655dd9b51d-1131adf";
 const BULK_ADD_PASSWORD = "dx888";
 const BULK_ADD_UNLOCK_KEY = "bulkAddUnlocked";
 const MIN_PASSWORD_LENGTH = 8;
@@ -33,17 +33,13 @@ export default function ToolsPage() {
     localStorage.setItem("authToken", authToken);
   }, [authToken]);
 
-  function tryAutoQueryFromText(text: string, delay = 100) {
+  function tryFillEmailFromText(text: string) {
     const match = text.match(EMAIL_REGEX);
     if (!match?.[0]) return false;
     const detectedEmail = match[0];
     setActiveTab("fetch");
     setToEmail(detectedEmail);
-    setFetchStatus(`检测到邮箱 ${detectedEmail}，正在自动查询...`);
-    setIsLoadingFetch(true);
-    setTimeout(() => {
-      fetchEmails(detectedEmail);
-    }, delay);
+    setFetchStatus(`已识别邮箱 ${detectedEmail}，请点击查询或按回车`);
     return true;
   }
 
@@ -55,7 +51,16 @@ export default function ToolsPage() {
     } catch {
       decodedEmail = routeEmail;
     }
-    tryAutoQueryFromText(decodedEmail, 500);
+    const match = decodedEmail.match(EMAIL_REGEX);
+    if (!match?.[0]) return;
+    const detectedEmail = match[0];
+    setActiveTab("fetch");
+    setToEmail(detectedEmail);
+    setFetchStatus(`检测到邮箱 ${detectedEmail}，正在自动查询...`);
+    setIsLoadingFetch(true);
+    setTimeout(() => {
+      fetchEmails(detectedEmail);
+    }, 500);
   }, [routeEmail]);
 
   useEffect(() => {
@@ -70,7 +75,7 @@ export default function ToolsPage() {
         return;
       }
       const text = e.clipboardData?.getData("text") ?? "";
-      tryAutoQueryFromText(text);
+      tryFillEmailFromText(text);
     };
     window.addEventListener("paste", handleWindowPaste);
     return () => {
@@ -82,7 +87,7 @@ export default function ToolsPage() {
     const text = e.clipboardData.getData("text");
     if (!EMAIL_REGEX.test(text)) return;
     e.preventDefault();
-    tryAutoQueryFromText(text);
+    tryFillEmailFromText(text);
   }
 
   async function fetchEmails(emailToFetch?: string | unknown) {

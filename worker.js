@@ -4,21 +4,11 @@ export default {
     
     // API Proxy 逻辑
     if (url.pathname.startsWith('/api-proxy')) {
-      const path = url.pathname.replace('/api-proxy', '');
+      const path = url.pathname.replace(/^\/api-proxy/, '');
       const targetUrl = `https://mail.dynmsl.com/api/public${path}${url.search}`;
-      
-      const headers = new Headers(request.headers);
-      headers.set('Host', 'mail.dynmsl.com');
-      
-      const newRequest = new Request(targetUrl, {
-        method: request.method,
-        headers: headers,
-        body: request.body,
-        redirect: 'follow',
-      });
 
       try {
-        return await fetch(newRequest);
+        return await fetch(new Request(targetUrl, request), { redirect: 'follow' });
       } catch (err) {
         return new Response(`API Proxy Error: ${err.message}`, { status: 500 });
       }
