@@ -24,22 +24,28 @@ export default {
       }
     }
 
-    // 处理静态资源 (Assets)
     if (env.ASSETS) {
-      // 优先处理 SPA 路由：如果路径包含 @（邮箱地址），或者不是静态资源文件，直接返回 index.html
-      // 注意：decodeURIComponent 用于处理被编码的路径，例如 %40
-      const decodedPath = decodeURIComponent(url.pathname);
+      let decodedPath = url.pathname;
+      try {
+        decodedPath = decodeURIComponent(url.pathname);
+      } catch {}
+      const normalizedPath = decodedPath.replace(/\/+$/, "") || "/";
       const isApi = url.pathname.startsWith('/api-proxy');
-      const isFile = url.pathname.split('/').pop().includes('.');
+      const lastSegment = normalizedPath.split('/').pop() || "";
+      const hasAssetExtension = /\.(?:js|mjs|css|png|jpg|jpeg|gif|webp|svg|ico|map|txt|json|woff2?|ttf|eot|wasm)$/i.test(lastSegment);
+      const isEmailPath = /^\/[^/]*@[^/]*$/.test(normalizedPath);
 
-      if (!isApi && (decodedPath.includes('@') || !isFile)) {
+      if (!isApi && (isEmailPath || !hasAssetExtension)) {
         const indexUrl = new URL('/index.html', request.url);
         return env.ASSETS.fetch(new Request(indexUrl, request));
       }
 
-      // 尝试获取静态资源
-      // 注意：如果前面的 SPA 逻辑没有拦截到（例如看似文件但其实不是），这里可能会返回 404
-      return await env.ASSETS.fetch(request);
+      const assetResponse = await env.ASSETS.fetch(request);
+      if (!isApi && assetResponse.status === 404) {
+        const indexUrl = new URL('/index.html', request.url);
+        return env.ASSETS.fetch(new Request(indexUrl, request));
+      }
+      return assetResponse;
     }
     
     return new Response("Not found", { status: 404 });
