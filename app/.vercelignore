@@ -1,0 +1,13 @@
+.git
+.gitignore
+.next
+node_modules
+.env*
+!.env.example
+.vercel
+coverage
+out
+build
+*.log
+.DS_Store
+
