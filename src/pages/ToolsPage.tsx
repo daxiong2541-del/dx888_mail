@@ -4,11 +4,12 @@ import { QRCodeSVG } from "qrcode.react";
 import "../App.css";
 import { mailService, Email, User } from "../services/api";
 
-const DEFAULT_TEST_TOKEN = "8d66ef93-beef-42da-baa3-2d655dd9b51d-1131adf";
+const DEFAULT_TEST_TOKEN = "8d66ef93-beef-42da-baa3-2d655dd9b51d";
 const BULK_ADD_PASSWORD = "dx888";
 const BULK_ADD_UNLOCK_KEY = "bulkAddUnlocked";
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 12;
+const DEFAULT_RANDOM_USERNAME_LENGTH = 13;
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 
 export default function ToolsPage() {
@@ -115,7 +116,7 @@ export default function ToolsPage() {
   }
 
   function generateRandomString(length: number) {
-    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ2345689";
     let ret = "";
     for (let i = 0; i < length; ++i) {
       ret += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -142,7 +143,7 @@ export default function ToolsPage() {
 
     const users: User[] = [];
     for (let i = 0; i < accountCount; i++) {
-      const username = generateRandomString(8);
+      const username = generateRandomString(DEFAULT_RANDOM_USERNAME_LENGTH);
       users.push({
         email: `${username}@dynmsl.com`,
         password: generatePassword()
