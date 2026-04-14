@@ -9,7 +9,7 @@ const BULK_ADD_PASSWORD = "dx888";
 const BULK_ADD_UNLOCK_KEY = "bulkAddUnlocked";
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 12;
-const DEFAULT_RANDOM_USERNAME_LENGTH = 13;
+const DEFAULT_RANDOM_USERNAME_LENGTH = 8;
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 
 export default function ToolsPage() {
@@ -26,6 +26,7 @@ export default function ToolsPage() {
   const [isLoadingFetch, setIsLoadingFetch] = useState(false);
 
   const [accountCount, setAccountCount] = useState<number>(10);
+  const [randomUsernameLength, setRandomUsernameLength] = useState<number>(DEFAULT_RANDOM_USERNAME_LENGTH);
   const [parsedUsers, setParsedUsers] = useState<User[]>([]);
   const [addUserStatus, setAddUserStatus] = useState("");
   const [isAddingUsers, setIsAddingUsers] = useState(false);
@@ -140,10 +141,14 @@ export default function ToolsPage() {
       setAddUserStatus("请输入有效的生成数量。");
       return;
     }
+    if (!randomUsernameLength || randomUsernameLength <= 0) {
+      setAddUserStatus("请输入有效的账号长度。");
+      return;
+    }
 
     const users: User[] = [];
     for (let i = 0; i < accountCount; i++) {
-      const username = generateRandomString(DEFAULT_RANDOM_USERNAME_LENGTH);
+      const username = generateRandomString(randomUsernameLength);
       users.push({
         email: `${username}@dynmsl.com`,
         password: generatePassword()
@@ -359,6 +364,16 @@ export default function ToolsPage() {
                     placeholder="输入数量"
                     value={accountCount}
                     onChange={(e) => setAccountCount(parseInt(e.target.value) || 0)}
+                    min="1"
+                  />
+                  <label>账号长度:</label>
+                  <input
+                    type="number"
+                    className="bulk-input"
+                    style={{ width: "120px" }}
+                    placeholder="长度"
+                    value={randomUsernameLength}
+                    onChange={(e) => setRandomUsernameLength(parseInt(e.target.value) || 0)}
                     min="1"
                   />
                 </div>
