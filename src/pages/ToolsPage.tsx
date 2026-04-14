@@ -148,10 +148,11 @@ export default function ToolsPage() {
 
     const users: User[] = [];
     for (let i = 0; i < accountCount; i++) {
-      const username = generateRandomString(randomUsernameLength);
+      const username = generateRandomString(randomUsernameLength).toUpperCase();
+      const password = generatePassword().toUpperCase();
       users.push({
-        email: `${username}@dynmsl.com`,
-        password: generatePassword()
+        email: `${username}@DYNMSL.COM`,
+        password
       });
     }
 
